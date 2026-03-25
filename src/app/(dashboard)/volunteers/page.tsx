@@ -18,7 +18,7 @@ export default function VolunteersPage() {
   const [filterSkill, setFilterSkill] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  const fetch = async () => {
+  const fetchVolunteers = async () => {
     const { data } = await supabase
       .from('volunteers')
       .select('id, profile_id, skills, last_location, is_available, profiles(full_name), updated_at')
@@ -28,16 +28,31 @@ export default function VolunteersPage() {
   };
 
   useEffect(() => {
-    fetch();
+    fetchVolunteers();
     const chan = supabase.channel('volunteers_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteers' }, fetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteers' }, fetchVolunteers)
       .subscribe();
     return () => { supabase.removeChannel(chan); };
   }, []);
 
   const toggleAvailability = async (id: string, cur: boolean) => {
-    await supabase.from('volunteers').update({ is_available: !cur }).eq('id', id);
-    fetch();
+    // If trying to set available, check they have no active task first
+    if (cur === false) { // current is false, we want to set it true
+      const { data: activeTasks } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('volunteer_id', id)
+        .in('status', ['dispatched', 'in_progress']);
+      
+      if (activeTasks && activeTasks.length > 0) {
+        alert('This volunteer still has an active task. Resolve the task first.');
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('volunteers').update({ is_available: !cur }).eq('id', id);
+    if (error) console.error('Toggle error:', error.message);
+    else fetchVolunteers();
   };
 
   const parseSkills = (skills: any): string[] => {

@@ -38,8 +38,9 @@ export default function AuthPage() {
           
           if (profError) {
              console.error('Profile fetch error:', profError);
-             // Default to volunteer if profile not found to stop infinite loading
-             router.push('/my-tasks');
+             setError('Account setup incomplete. Please contact support or re-register.');
+             setLoading(false);
+             return;
           } else if (profile?.role === 'admin') {
             router.push('/map');
           } else {
@@ -47,7 +48,7 @@ export default function AuthPage() {
           }
         }
       } else {
-        const { error: authError } = await supabase.auth.signUp({
+        const { data: signUpData, error: authError } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -60,9 +61,27 @@ export default function AuthPage() {
 
         if (authError) throw authError;
 
-        // The database trigger 'on_auth_user_created' handles creating
-        // the profile and volunteer records automatically.
-        // Redirecting users to the appropriate dashboard
+        const newUser = signUpData.user;
+        if (newUser) {
+          // 1. Create the profile row
+          const { error: profileError } = await supabase.from('profiles').insert({
+            id: newUser.id,
+            full_name: fullName,
+            role: role,
+          });
+          if (profileError) throw profileError;
+
+          // 2. If volunteer, create the volunteers row too
+          if (role === 'volunteer') {
+            const { error: volError } = await supabase.from('volunteers').insert({
+              profile_id: newUser.id,
+              skills: [],
+              is_available: true,
+            });
+            if (volError) throw volError;
+          }
+        }
+
         if (role === 'admin') router.push('/map');
         else router.push('/my-tasks');
       }

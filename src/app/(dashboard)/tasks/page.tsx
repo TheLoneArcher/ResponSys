@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Loader2, AlertCircle, Clock, UserIcon, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -29,14 +29,14 @@ export default function TasksPage() {
   const [dispatching, setDispatching] = useState(false);
   const [search, setSearch] = useState('');
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     const [{ data: reps }, { data: vols }] = await Promise.all([
       supabase.from('need_reports').select('*, profiles(full_name), tasks(status, volunteers(profiles(full_name)))').order('created_at', { ascending: false }),
       supabase.from('volunteers').select('id, profile_id, skills, is_available, profiles(full_name)').eq('is_available', true),
     ]);
     setReports(reps ?? []);
     setVolunteers(vols ?? []);
-  };
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -59,7 +59,7 @@ export default function TasksPage() {
   }, []);
 
   const handleDispatch = async (volunteerId: string) => {
-    if (!dispatchModal || !adminId) return;
+    if (!dispatchModal || !adminId || dispatching) return;
     setDispatching(true);
     const report = dispatchModal.report;
     const vol = volunteers.find(v => v.id === volunteerId);
@@ -147,8 +147,10 @@ export default function TasksPage() {
                   return (
                     <div
                       key={report.id}
-                      className="bg-[#111827] border border-[#1F2937] hover:border-[#374151] rounded-md p-3 cursor-pointer group transition-colors"
-                      onClick={() => col.id === 'pending' && setDispatchModal({ report })}
+                      className={`bg-[#111827] border border-[#1F2937] hover:border-[#374151] rounded-md p-3 group transition-colors ${col.id === 'pending' ? 'cursor-pointer' : 'cursor-default'}`}
+                      onClick={() => {
+                        if (col.id === 'pending') setDispatchModal({ report });
+                      }}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${SEV[report.severity] ?? ''}`}>

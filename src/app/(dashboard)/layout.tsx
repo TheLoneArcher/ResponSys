@@ -34,9 +34,13 @@ export default async function DashboardLayout({
     
     if (prof) {
       role = prof.role
+      const isAvailable = Array.isArray(prof.volunteers) && prof.volunteers.length > 0
+        ? prof.volunteers[0].is_available
+        : null; // null = unknown/no volunteer row, not "unavailable"
+      
       profile = {
         ...prof,
-        is_available: prof.volunteers?.[0]?.is_available ?? false
+        is_available: isAvailable
       }
     }
   }

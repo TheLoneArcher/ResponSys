@@ -97,7 +97,7 @@ async function main() {
     await client.query(`
       CREATE TABLE tasks (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        report_id UUID REFERENCES need_reports(id) ON DELETE CASCADE,
+        report_id UUID REFERENCES need_reports(id) ON DELETE CASCADE UNIQUE,
         volunteer_id UUID REFERENCES volunteers(id) ON DELETE CASCADE,
         assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
         status status_type NOT NULL DEFAULT 'pending',
