@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #0A0E1A;
+    --color-surface: #111827;
+    --color-surface-raised: #1A2235;
+    --color-border: #1F2D45;
+    --color-text-primary: #F0F4FF;
+    --color-text-secondary: #8A9BBF;
+    --color-text-muted: #4A5568;
+    --color-gold: #C9A84C;
+    --color-gold-dim: #7A6030;
+    --color-critical: #C0392B;
+    --color-moderate: #B7770D;
+    --color-resolved: #1E7E5E;
+    --color-primary: #2E5BFF;
+
+    /* Shadcn UI Overrides to use our colors */
+    --background: var(--color-bg);
+    --foreground: var(--color-text-primary);
+
+    --card: var(--color-surface);
+    --card-foreground: var(--color-text-primary);
+
+    --popover: var(--color-surface-raised);
+    --popover-foreground: var(--color-text-primary);
+
+    --primary: var(--color-primary);
+    --primary-foreground: #ffffff;
+
+    --secondary: var(--color-surface-raised);
+    --secondary-foreground: var(--color-text-secondary);
+
+    --muted: var(--color-surface);
+    --muted-foreground: var(--color-text-muted);
+
+    --accent: var(--color-surface-raised);
+    --accent-foreground: var(--color-text-primary);
+
+    --destructive: var(--color-critical);
+    --destructive-foreground: #ffffff;
+
+    --border: var(--color-border);
+    --input: var(--color-border);
+    --ring: var(--color-primary);
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
