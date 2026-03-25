@@ -21,7 +21,7 @@ export default function VolunteersPage() {
   const fetch = async () => {
     const { data } = await supabase
       .from('volunteers')
-      .select('*, profiles(full_name)')
+      .select('id, profile_id, skills, last_location, is_available, profiles(full_name), updated_at')
       .order('updated_at', { ascending: false });
     setVolunteers(data ?? []);
     setLoading(false);

@@ -75,17 +75,61 @@ export default function ProfilePage() {
     setTimeout(() => setToast(''), 3000);
   };
 
+  const handleToggleAvailability = async (newValue: boolean) => {
+    setForm(f => ({ ...f, isAvailable: newValue }));
+    if (!profile || profile.role !== 'volunteer') return;
+
+    // Use upsert-like logic to ensure volunteer row exists
+    const payload: any = { 
+      profile_id: profile.id,
+      is_available: newValue,
+      skills: form.skills
+    };
+
+    const { data: vol, error } = await supabase
+      .from('volunteers')
+      .upsert(payload, { onConflict: 'profile_id' })
+      .select()
+      .single();
+
+    if (error) {
+      setForm(f => ({ ...f, isAvailable: !newValue }));
+      showToast('Failed to update availability.', 'error');
+    } else {
+      setVolunteer(vol);
+      showToast(newValue ? 'You are now available.' : 'You are now unavailable.', 'success');
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await supabase.from('profiles').update({ full_name: form.fullName, phone: form.phone }).eq('id', profile?.id);
-    if (profile?.role === 'volunteer' && volunteer) {
-      const payload: any = { is_available: form.isAvailable, skills: form.skills };
-      if (form.lat && form.lon) payload.last_location = `POINT(${form.lon} ${form.lat})`;
-      await supabase.from('volunteers').update(payload).eq('id', volunteer.id);
+    try {
+      await supabase.from('profiles').update({ full_name: form.fullName, phone: form.phone }).eq('id', profile?.id);
+      
+      if (profile?.role === 'volunteer') {
+        const payload: any = { 
+          profile_id: profile.id,
+          is_available: form.isAvailable, 
+          skills: form.skills 
+        };
+        if (form.lat && form.lon) payload.last_location = `POINT(${form.lon} ${form.lat})`;
+        
+        const { data: vol, error } = await supabase
+          .from('volunteers')
+          .upsert(payload, { onConflict: 'profile_id' })
+          .select()
+          .single();
+          
+        if (vol) setVolunteer(vol);
+        if (error) throw error;
+      }
+      showToast('Profile saved.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Error saving profile', 'error');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    showToast('Profile saved.', 'success');
   };
 
   if (loading) return <div className="flex h-full items-center justify-center bg-[#0A0E17]"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>;
@@ -176,7 +220,7 @@ export default function ProfilePage() {
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
                     <span className="text-[13px] text-[#94A3B8]">{form.isAvailable ? 'Available' : 'Unavailable'}</span>
                     <div className="relative">
-                      <input type="checkbox" checked={form.isAvailable} onChange={e => setForm(f => ({ ...f, isAvailable: e.target.checked }))} className="sr-only peer" />
+                      <input type="checkbox" checked={form.isAvailable} onChange={e => handleToggleAvailability(e.target.checked)} className="sr-only peer" />
                       <div className="w-9 h-5 bg-[#1F2937] rounded-full peer peer-checked:bg-blue-600 transition-colors" />
                       <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
                     </div>

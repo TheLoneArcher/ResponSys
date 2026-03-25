@@ -14,29 +14,7 @@ const MapClient = dynamic(() => import('@/components/MapClient'), {
   ),
 });
 
-function getReportLocation(r: any): [number, number] | undefined {
-  if (!r) return undefined;
-  if (r.latitude && r.longitude) return [parseFloat(r.latitude), parseFloat(r.longitude)];
-  const loc = r.location || r.last_location;
-  if (!loc) return undefined;
-  if (loc.coordinates) return [loc.coordinates[1], loc.coordinates[0]];
-  if (typeof loc === 'string' && loc.startsWith('0101000020E6100000')) {
-    try {
-      const hexToBuf = (h: string) => {
-        const matches = h.match(/../g);
-        if (!matches) return new ArrayBuffer(0);
-        return new Uint8Array(matches.map(b => parseInt(b, 16))).buffer;
-      };
-      const dv = new DataView(hexToBuf(loc));
-      return [dv.getFloat64(17, true), dv.getFloat64(9, true)]; // [lat, lng]
-    } catch {}
-  }
-  if (typeof loc === 'string' && loc.startsWith('POINT')) {
-    const m = loc.match(/\(([^ ]+)\s+([^)]+)\)/);
-    if (m) return [parseFloat(m[2]), parseFloat(m[1])];
-  }
-  return undefined;
-}
+import { parsePoint } from '@/components/MapClient';
 
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371; // km
@@ -71,6 +49,7 @@ export default function MapPage() {
   const [dispatching, setDispatching] = useState(false);
   const [filter, setFilter]           = useState<string>('all');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [toast, setToast]             = useState<string | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -81,7 +60,7 @@ export default function MapPage() {
 
       const [repsData, volsData, updatesData] = await Promise.all([
         supabase.from('need_reports').select('*, profiles(full_name)').order('created_at', { ascending: false }),
-        supabase.from('volunteers').select('*, profiles(full_name)').eq('is_available', true),
+        supabase.from('volunteers').select('id, profile_id, skills, last_location, is_available, profiles(full_name)').eq('is_available', true),
         supabase.from('report_updates').select('*, profiles:author_id(full_name)').order('created_at', { ascending: false }).limit(20)
       ]);
 
@@ -111,7 +90,7 @@ export default function MapPage() {
         report_id: selected.id,
         volunteer_id: volunteerId,
         assigned_by: currentUser.id,
-        status: 'pending',
+        status: 'dispatched',
         notes: 'Assigned via Map Dispatch'
       }).select().single();
 
@@ -143,9 +122,11 @@ export default function MapPage() {
       }
     } catch (err: any) {
       console.error('Dispatch error:', err.message);
+      setToast(`Dispatch failed: ${err.message}`);
     } finally {
       setDispatching(false);
       setSelected(null);
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
@@ -159,15 +140,15 @@ export default function MapPage() {
 
   const sortedVolunteers = useMemo(() => {
     // Filter out "bystanders" (volunteers with NO skills selected)
-    const activeVolunteers = volunteers.filter(v => v.skills && v.skills.length > 0);
+    const activeVolunteers = volunteers.filter(v => v.skills && Array.isArray(v.skills) && v.skills.length > 0);
     
     if (!selected) return activeVolunteers;
-    const selectedLoc = getReportLocation(selected);
-    if (!selectedLoc) return activeVolunteers;
+    const sLoc = parsePoint(selected.location);
+    if (!sLoc) return activeVolunteers;
     
     return [...activeVolunteers].map(v => {
-      const vLoc = getReportLocation(v);
-      const dist = vLoc ? getDistance(selectedLoc[0], selectedLoc[1], vLoc[0], vLoc[1]) : Infinity;
+      const vLoc = parsePoint(v.last_location);
+      const dist = vLoc ? getDistance(sLoc[0], sLoc[1], vLoc[0], vLoc[1]) : Infinity;
       return { ...v, _dist: dist };
     }).sort((a, b) => a._dist - b._dist);
   }, [selected, volunteers]);
@@ -185,7 +166,7 @@ export default function MapPage() {
             <MapClient 
               reports={filtered} 
               onSelectReport={setSelected} 
-              center={selected ? getReportLocation(selected) : undefined}
+              center={selected ? (parsePoint(selected.location) || undefined) : undefined}
               zoom={selected ? 13 : 5}
             />
           </div>
@@ -255,10 +236,12 @@ export default function MapPage() {
                 )}
 
                 {/* Dispatch panel */}
-                {currentUser?.role === 'admin' && selected.status === 'pending' && (
+                {currentUser?.role === 'admin' && (selected.status === 'pending' || selected.status === 'dispatched') && (
                   <div className="pt-4 border-t border-[#1F2937]">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-[11px] uppercase tracking-widest font-semibold text-[#64748B]">Available Volunteers</p>
+                      <p className="text-[11px] uppercase tracking-widest font-semibold text-[#64748B]">
+                        {selected.status === 'dispatched' ? 'Re-assign Volunteer' : 'Available Volunteers'}
+                      </p>
                       <span className="text-[10px] text-blue-400 font-medium bg-blue-500/10 px-2 py-0.5 rounded-full">Nearest first</span>
                     </div>
                     
@@ -288,7 +271,10 @@ export default function MapPage() {
                               </div>
                             </div>
                             <div className="w-6 h-6 rounded-full bg-[#1F2937] flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                              <ChevronRight className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-white transition-colors" />
+                              {dispatching 
+                                ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                                : <ChevronRight className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-white transition-colors" />
+                              }
                             </div>
                           </button>
                         ))}
@@ -377,6 +363,14 @@ export default function MapPage() {
               </div>
             </div>
           </div>
+
+          {/* Toast */}
+          {toast && (
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[1000] bg-[#111827] border border-[#1F2937] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in-up">
+              <div className={`w-2 h-2 rounded-full ${toast.includes('failed') ? 'bg-red-500' : 'bg-emerald-500 animate-pulse'}`} />
+              <p className="text-sm font-medium text-white">{toast}</p>
+            </div>
+          )}
         </>
       )}
     </div>

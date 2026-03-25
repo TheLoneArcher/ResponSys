@@ -32,7 +32,7 @@ export default function TasksPage() {
   const fetchAll = async () => {
     const [{ data: reps }, { data: vols }] = await Promise.all([
       supabase.from('need_reports').select('*, profiles(full_name), tasks(status, volunteers(profiles(full_name)))').order('created_at', { ascending: false }),
-      supabase.from('volunteers').select('*, profiles(full_name)').eq('is_available', true),
+      supabase.from('volunteers').select('id, profile_id, skills, is_available, profiles(full_name)').eq('is_available', true),
     ]);
     setReports(reps ?? []);
     setVolunteers(vols ?? []);

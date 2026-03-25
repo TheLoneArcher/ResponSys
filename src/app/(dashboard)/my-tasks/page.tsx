@@ -27,29 +27,51 @@ export default function MyTasksPage() {
   const [tasks, setTasks]     = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'active' | 'done'>('active');
+  const [tab, setTab]         = useState<'active' | 'done'>('active');
+  const [volId, setVolId]     = useState<string | null>(null);
 
   const fetchTasks = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: vol } = await supabase.from('volunteers').select('id').eq('profile_id', user.id).single();
-    if (!vol) { setLoading(false); return; }
-    const { data } = await supabase
-      .from('tasks')
-      .select('*, need_reports(id, title, description, severity, location_label, required_skill)')
-      .eq('volunteer_id', vol.id)
-      .order('assigned_at', { ascending: false });
-    setTasks(data ?? []);
-    setLoading(false);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: vol, error: vErr } = await supabase.from('volunteers').select('id').eq('profile_id', user.id).single();
+      if (vErr || !vol) { 
+        if (vErr) console.error('Volunteer fetch error:', vErr.message);
+        setLoading(false); 
+        return; 
+      }
+      setVolId(vol.id);
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*, need_reports(id, title, description, severity, location_label, required_skill)')
+        .eq('volunteer_id', vol.id)
+        .order('assigned_at', { ascending: false });
+
+      if (error) console.error('Tasks fetch error:', error.message);
+      setTasks(data ?? []);
+    } catch (err: any) {
+      console.error('Fetch tasks bug:', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchTasks();
-    const chan = supabase.channel('my_tasks')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchTasks)
+  }, []);
+
+  useEffect(() => {
+    if (!volId) return;
+    const chan = supabase.channel('my_tasks_' + volId)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'tasks',
+        filter: `volunteer_id=eq.${volId}`
+      }, fetchTasks)
       .subscribe();
     return () => { supabase.removeChannel(chan); };
-  }, []);
+  }, [volId]);
 
   const updateStatus = async (taskId: string, reportId: string, newStatus: string) => {
     setUpdatingId(taskId);
