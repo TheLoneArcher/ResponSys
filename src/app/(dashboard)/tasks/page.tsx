@@ -53,24 +53,61 @@ export default function TasksPage() {
     const chan = supabase.channel('tasks_rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'need_reports' }, fetchAll)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, fetchAll)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteers' }, fetchAll)
       .subscribe();
     return () => { supabase.removeChannel(chan); };
   }, []);
 
   const handleDispatch = async (volunteerId: string) => {
-    if (!dispatchModal) return;
+    if (!dispatchModal || !adminId) return;
     setDispatching(true);
+    const report = dispatchModal.report;
     const vol = volunteers.find(v => v.id === volunteerId);
-    await supabase.rpc('dispatch_volunteer', {
-      p_report_id: dispatchModal.report.id,
-      p_volunteer_id: volunteerId,
-      p_assigned_by: adminId,
-      p_admin_name: adminName,
-      p_volunteer_name: vol?.profiles?.full_name ?? 'Volunteer',
-    });
-    setDispatching(false);
-    setDispatchModal(null);
-    fetchAll();
+
+    try {
+      // 1. Create the task
+      const { data: task, error: tErr } = await supabase.from('tasks').insert({
+        report_id: report.id,
+        volunteer_id: volunteerId,
+        assigned_by: adminId,
+        status: 'dispatched',
+        notes: 'Assigned via Task Board'
+      }).select().single();
+
+      if (tErr) throw tErr;
+
+      // 2. Mark incident as dispatched
+      await supabase.from('need_reports').update({ status: 'dispatched' }).eq('id', report.id);
+
+      // 3. Log update
+      await supabase.from('report_updates').insert({
+        report_id: report.id,
+        author_id: adminId,
+        message: `Task assigned to ${vol?.profiles?.full_name || 'Volunteer'}`
+      });
+
+      // 4. Mark volunteer busy
+      await supabase.from('volunteers').update({ is_available: false }).eq('id', volunteerId);
+
+      // 5. Notify
+      if (vol?.profile_id) {
+        await supabase.from('notifications').insert({
+          recipient_id: vol.profile_id,
+          title: 'New Task Assignment',
+          message: `You have been dispatched to: ${report.title}`,
+          type: 'assignment',
+          related_report_id: report.id,
+          related_task_id: task?.id
+        });
+      }
+
+      setDispatchModal(null);
+      fetchAll();
+    } catch (err: any) {
+      console.error('Dispatch error:', err.message);
+    } finally {
+      setDispatching(false);
+    }
   };
 
   if (loading) return <div className="flex h-full items-center justify-center bg-[#0A0E17]"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>;

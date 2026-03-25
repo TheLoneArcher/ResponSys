@@ -53,14 +53,37 @@ export default function MyTasksPage() {
 
   const updateStatus = async (taskId: string, reportId: string, newStatus: string) => {
     setUpdatingId(taskId);
-    await supabase.rpc('update_task_status', {
-      p_task_id:     taskId,
-      p_new_status:  newStatus,
-      p_author_name: 'Volunteer',
-      p_author_role: 'volunteer',
-    });
-    setUpdatingId(null);
-    fetchTasks();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Update the task
+      await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+
+      // 2. Log it
+      await supabase.from('report_updates').insert({
+        report_id: reportId,
+        author_id: user.id,
+        message: `Task status changed to: ${newStatus.replace('_', ' ')}`
+      });
+
+      // 3. Update the report status
+      await supabase.from('need_reports').update({ status: newStatus }).eq('id', reportId);
+
+      // 4. CRITICAL: If resolved, set volunteer back to available
+      if (newStatus === 'verified') {
+        const { data: vol } = await supabase.from('volunteers').select('id').eq('profile_id', user.id).single();
+        if (vol) {
+          await supabase.from('volunteers').update({ is_available: true }).eq('id', vol.id);
+        }
+      }
+
+      fetchTasks();
+    } catch (err: any) {
+      console.error('Status update error:', err.message);
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   if (loading) return <div className="flex h-full items-center justify-center bg-[#0A0E17]"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>;
