@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ResponSys - Crisis Coordination Platform
 
-## Getting Started
+ResponSys is a high-fidelity, real-time tactical coordination platform designed for emergency NGOs, community crisis response networks, and rapid-response logistics teams. The platform bridges the gap between central dispatchers and field volunteers by tracking geographical incidents, computing nearest-responder metrics, and facilitating real-time operational communications.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 👥 User Roles & Workflows
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ResponSys utilizes a robust role-based access architecture with three distinct user categories:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Dispatcher (Admin)
+The central command node of the platform.
+*   **Capabilities**: Full oversight of the tactical map, ability to review incoming incident reports, and authority to dispatch volunteers to specific crises.
+*   **Workflow**: Monitors the Live Operations Feed and Incident Queue. When a critical issue arises, the system automatically checks for the nearest available volunteers and ranks them by distance. The dispatcher assigns the task.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Volunteer
+Active field responders who have opted-in by defining their specialized skills via their profile.
+*   **Capabilities**: Can be dispatched by Admins to missions matching their skills. 
+*   **Workflow**: Maintains availability and GPS location. Once assigned a task, they use the **My Tasks** dashboard to track mission details and mark resolutions.
 
-## Learn More
+### 3. Civilian / Bystander
+Standard users who have registered but have not opted-in to field response (i.e., they have not selected any "Skills" in their profile).
+*   **Capabilities**: Can actively submit crisis reports securely with GPS data. 
+*   **Exclusion**: To prevent operational clutter, civilians and bystanders are **automatically excluded** from the active volunteer map and dispatch queues unless they explicitly update their profile with response skills.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🗺️ Core Features & Pages
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Authentication & Onboarding (`/auth`)
+*   Provides secure, JWT-backed user authentication.
+*   Routes users contextually based on their chosen role (Dispatchers route directly to the Map, normal users to the Dashboard).
 
-## Deploy on Vercel
+### Tactical Map Hub (`/map`)
+*   **Dynamic GIS Map**: Uses Leaflet and PostGIS GEOGRAPHY data to render high-performance, real-time map plots of incidents using customized, severity-colored smart pins.
+*   **Incident Queue**: A live, scrollable feed of active reports overlaying the map.
+*   **Intelligent Dispatching**: Clicking an incident instantly computes the Euclidean distance (Haversine formula applied) between the crisis point and every available volunteer, surfacing the nearest responders and their specific skills directly to the dispatcher.
+*   **Live Operations Feed**: A real-time socket connection streams mission-critical updates and dispatcher logs instantly without requiring refreshes.
+*   *Note: Dispatched volunteers automatically have their `is_available` status set to `busy / false` to ensure dispatch bandwidth isn't crossed.*
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Report Log (`/reports`)
+*   A comprehensive tabular database view of all historical and active incidents.
+*   **Advanced Filtering**: Sort and search by severity, status, keyword, or assignee.
+*   **Data Export**: Built-in functionality for Admins to quickly export incident logs into `.csv` format for post-crisis reporting and data analysis.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Submit Report (`/submit-report`)
+*   A streamlined intake form available to all users (volunteers and civilians).
+*   Allows users to pinpoint crisis location manually or via precision HTML5 Geolocation APIs.
+*   Incident creators can flag the specific emergency severity and request tailored skills (e.g., Heavy Lifting, Medical Support).
+
+### My Tasks (`/my-tasks`)
+*   The personalized mission control for active Volunteers.
+*   Displays all tasks explicitly assigned to them by central dispatch.
+*   Allows the volunteer to append mission logs and formally "Resolve" the incident once field operations conclude.
+
+### Nearby Discovery (`/nearby`)
+*   A geographic visualization tool strictly for field agents.
+*   Plots both active incidents and other volunteers in the nearby operational radius, helping field teams coordinate dynamically.
+
+### Profile & Skills Management (`/my-profile`)
+*   **Civilian to Volunteer Pathway**: Civilians can transition to Volunteers at any time by simply selecting skills (Medical, Tech Support, Logistics, etc.).
+*   **Availability Toggle**: Field agents can toggle their availability on and off. If disabled, they instantly vanish from the active dispatcher queue.
+*   **GPS Tracing**: Allows users to refresh their localized coordinates seamlessly into the Supabase PostGIS geospatial structure.
+
+---
+
+## 🚀 Technical Stack
+*   **Frontend**: Next.js 15 (App Router), React 18, TailwindCSS.
+*   **Geospatial / Mapping**: React-Leaflet, Leaflet.js Custom SVG Node rendering.
+*   **Backend & DB**: Supabase, PostgreSQL / PostgREST.
+*   **Geodata Storage**: PostGIS `GEOGRAPHY(POINT)` natively mapped and EWKB hex-decoded in client-side runtime for high security constraint environments.
+
+---
+
+*(Note: This README is continuously updated as new features are integrated into the ResponSys operational layer.)*
